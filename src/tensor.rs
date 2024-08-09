@@ -1,4 +1,6 @@
 use std::{slice, sync::Arc, vec};
+use std::ops::Mul;
+
 pub struct Tensor<T> {
     data: Arc<Box<[T]>>,
     shape: Vec<usize>,
@@ -35,7 +37,7 @@ impl<T: Copy + Clone + Default> Tensor<T> {
     pub fn shape(&self) -> &Vec<usize> {
         &self.shape
     }
-
+    pub fn length(&self)->usize{self.length}
     pub fn size(&self) -> usize {
         self.length
     }
@@ -62,7 +64,21 @@ impl<T: Copy + Clone + Default> Tensor<T> {
         }
     }
 
-
+    // pub fn sigmoid(&self)->Tensor<f32>{
+    //     let sigmoid  = |x:f32|->f32{
+    //         1.0/(1.0+(-x).exp())
+    //     };
+    //     let result_data:Vec<f32>=self.data
+    //         .iter()
+    //         .map(|&x| sigmoid(x.clone()))
+    //         .collect();
+    //     Tensor{
+    //         data:Arc::new(result_data.into_boxed_slice()),
+    //         shape:self.shape.clone(),
+    //         offset:self.offset,
+    //         length:self.length,
+    //     }
+    // }
 }
 
 // Some helper functions for testing and debugging

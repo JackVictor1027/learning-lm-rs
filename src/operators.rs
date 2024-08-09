@@ -1,3 +1,7 @@
+use std::mem::swap;
+use std::ops::Mul;
+use std::ptr::addr_of_mut;
+use std::sync::Arc;
 use crate::tensor::Tensor;
 
 // get (row) vectors from a 2D table given a list of indices
@@ -71,25 +75,94 @@ pub fn masked_softmax(y: &mut Tensor<f32>) {
 }
 
 pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
+    assert_eq!(x.shape(), y.shape(), "Input and output tensors must have the same shape.");
+    assert_eq!(x.shape().last(), w.shape().last(), "Weight tensor must have the same size as the last dimension of input tensor.");
+
+    let num_elements = x.length();
+    let last_dim_size  = *x.shape().last().clone().unwrap();//也就是提示当中提到的n
+    let num_batch = num_elements/last_dim_size;//得到究竟有多少批次
+    //“即张量 X(...,n)和 Y(...,n)都是由若干个长度为n的向量xi,yi组成的”
+    for batch_idx in 0..num_batch{
+        let start_idx = batch_idx*last_dim_size;
+        let end_idx = start_idx+last_dim_size;
+
+        //提前当前批次的所有数据，并计算出平方和
+        let batch_data = &x.data()[start_idx..end_idx];
+        let sum_of_sequence:f32 = batch_data.iter().map(|&value| value*value).sum();
+
+        //计算本批次的RMS
+        let rms = (sum_of_sequence/ last_dim_size as f32+epsilon).sqrt();
+
+        //得出本批次的RMS Normalization
+        for i in 0..last_dim_size{
+            let weight =&w.data()[i];//说明了w就是一个一维向量
+            unsafe { y.data_mut()[start_idx + i] = batch_data[i] * weight / rms; }
+        }
+    }
 }
 
+pub fn sigmoid(x:f32)->f32{
+    1.0/(1.0+(-x).exp())
+}
 // y = sigmoid(x) * x * y
 // hint: this is an element-wise operation
 pub fn silu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
+    //("实现 silu，这里给了一些前期准备工作的提示，你可以参考");
     // let len = y.size();
     // assert!(len == x.size());
 
     // let _y = unsafe { y.data_mut() };
     // let _x = x.data();
+    let len = y.size();
+    assert!(len == x.size());
+    let mut _y=unsafe{y.data_mut()};
+    let _x=x.data();
 
-    todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
+    for i in 0..len {
+        let x0=_x[i];
+        let sigmoid_x0 = sigmoid(x0);
+        _y[i]=sigmoid_x0*x0*_y[i];
+    }
+
+    // -y=x.sigmoid()*x*y;
+    // y.data()=_y;
+}
+
+pub fn print(t:&Tensor<f32>,name:&str){
+    println!("{}:{:?}",name,t.data());
 }
 
 // C = beta * C + alpha * A @ B^T
 // hint: You don't need to do an explicit transpose of B
 pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    let (m, k_a) = (a.shape()[0], a.shape()[1]); // A 的形状为 m x k
+    let (n, k_b) = (b.shape()[0], b.shape()[1]); // B 的形状为 n x k
+
+    assert_eq!(k_a, k_b, "A's columns must match B's rows."); // 验证 A 和 B 的维度匹配
+    assert_eq!(c.shape()[0], m, "Output tensor C must have the shape m x n."); // 验证 C 的形状为 m x n
+    assert_eq!(c.shape()[1], n, "Output tensor C must have the shape m x n."); // 验证 C 的形状为 m x n
+
+    let c_data = unsafe { c.data_mut() };
+    let a_data = a.data();
+    let b_data = b.data();
+
+    // 对 C 应用缩放因子 beta
+    for i in 0..m {
+        for j in 0..n {
+            c_data[i * n + j] *= beta;
+        }
+    }
+
+    // 计算矩阵乘法，并累加到 C 中
+    for i in 0..m {
+        for j in 0..n {
+            let mut sum = 0.0;
+            for l in 0..k_a {
+                sum += a_data[i * k_a + l] * b_data[j * k_b + l]; // 使用 B 的转置
+            }
+            c_data[i * n + j] += alpha * sum; // 将乘积累加到 C
+        }
+    }
 }
 
 // Dot product of two tensors (treated as vectors)

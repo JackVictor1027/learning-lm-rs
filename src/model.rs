@@ -8,6 +8,8 @@ use crate::params::LLamaParams;
 use crate::tensor::Tensor;
 use safetensors::SafeTensors;
 use std::path::Path;
+use crate::operators::{matmul_transb, rms_norm, sigmoid, silu};
+
 pub struct Llama<T> {
     vocab: usize,           // vocab size
     n_layers: usize,        // number of layers
@@ -167,7 +169,24 @@ fn mlp(
     rms_w: &Tensor<f32>,
     eps: f32,
 ) {
-    todo!("Implement mlp");
+    /*
+    hidden = rms_norm(residual)
+    gate = hidden @ gate_weight.T
+    up = hidden @ up_weight.T
+    hidden = gate * sigmoid(gate) * up ## silu
+    hidden = hidden @ down_weight.T
+    residual = hidden + residual
+    */
+    //结果总是存在第一个引用当中
+    rms_norm(hidden_states,residual,rms_w,eps);
+    matmul_transb(gate,0.0,hidden_states,w_gate,1.0);
+    matmul_transb(up,0.0,hidden_states,w_up,1.0);
+    silu(up,gate);
+    matmul_transb(hidden_states,0.0,up,w_down,1.0);
+
+    for i in 0..residual.length(){
+        unsafe { residual.data_mut()[i] = residual.data_mut()[i] + hidden_states.data_mut()[i]; }
+    }
 }
 
 #[test]
